@@ -32,7 +32,7 @@ final class InspectLink
      */
     public static function serialize(ItemPreviewData $data): string
     {
-        if ($data->paintwear < 0.0 || $data->paintwear > 1.0) {
+        if ($data->paintwear !== null && ($data->paintwear < 0.0 || $data->paintwear > 1.0)) {
             throw new \InvalidArgumentException(
                 sprintf('paintwear must be in [0.0, 1.0], got %f', $data->paintwear),
             );
@@ -216,6 +216,10 @@ final class InspectLink
 
         $w->writeUint32(10, $s->pattern);
 
+        if ($s->highlightReel !== null) {
+            $w->writeUint32(11, $s->highlightReel);
+        }
+
         return $w->toBytes();
     }
 
@@ -236,6 +240,7 @@ final class InspectLink
                 8 => $s->offsetY = (float) unpack('f', $f['value'])[1],
                 9 => $s->offsetZ = (float) unpack('f', $f['value'])[1],
                 10 => $s->pattern = $f['value'],
+                11 => $s->highlightReel = $f['value'],
                 default => null,
             };
         }
@@ -257,9 +262,11 @@ final class InspectLink
         $w->writeUint32(5, $item->rarity);
         $w->writeUint32(6, $item->quality);
 
-        // paintwear: float32 reinterpreted as uint32 varint
-        $pwUint32 = self::float32ToUint32($item->paintwear);
-        $w->writeUint32(7, $pwUint32);
+        // paintwear: float32 reinterpreted as uint32 varint (only written if set)
+        if ($item->paintwear !== null) {
+            $pwUint32 = self::float32ToUint32($item->paintwear);
+            $w->writeUint32(7, $pwUint32);
+        }
 
         $w->writeUint32(8, $item->paintseed);
         $w->writeUint32(9, $item->killeaterscoretype);

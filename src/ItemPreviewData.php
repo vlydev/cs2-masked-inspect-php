@@ -28,7 +28,7 @@ final class ItemPreviewData
         public int $paintindex = 0,
         public int $rarity = 0,
         public int $quality = 0,
-        public float $paintwear = 0.0,
+        public ?float $paintwear = null,
         public int $paintseed = 0,
         public int $killeaterscoretype = 0,
         public int $killeatervalue = 0,

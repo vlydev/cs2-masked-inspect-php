@@ -451,4 +451,123 @@ class InspectLinkTest extends TestCase
         $result = InspectLink::serialize(new ItemPreviewData(customname: str_repeat('A', 100)));
         $this->assertStringStartsWith('00', $result);
     }
+
+    // -----------------------------------------------------------------------
+    // New test vectors from csfloat/cs-inspect-serializer gen.test.ts
+    // -----------------------------------------------------------------------
+
+    /** CSFloat vector A — no stickers, paintwear ≈ 0.6337 */
+    private const CSFLOAT_A = '00180720DA03280638FBEE88F90340B2026BC03C96';
+
+    /** CSFloat vector B — 4 stickers id=76 each, paintwear ≈ 0.99 */
+    private const CSFLOAT_B = '00180720C80A280638A4E1F5FB03409A0562040800104C62040801104C62040802104C62040803104C6D4F5E30';
+
+    /** CSFloat vector C — keychain item (defindex=1355), highlight_reel=345 */
+    private const CSFLOAT_C = 'A2B2A2BA69A882A28AA192AECAA2D2B700A3A5AAA2B286FA7BA0D684BE72';
+
+    public function testCsfloatA_Defindex(): void
+    {
+        $this->assertSame(7, InspectLink::deserialize(self::CSFLOAT_A)->defindex);
+    }
+
+    public function testCsfloatA_Paintindex(): void
+    {
+        $this->assertSame(474, InspectLink::deserialize(self::CSFLOAT_A)->paintindex);
+    }
+
+    public function testCsfloatA_Paintseed(): void
+    {
+        $this->assertSame(306, InspectLink::deserialize(self::CSFLOAT_A)->paintseed);
+    }
+
+    public function testCsfloatA_Rarity(): void
+    {
+        $this->assertSame(6, InspectLink::deserialize(self::CSFLOAT_A)->rarity);
+    }
+
+    public function testCsfloatA_Paintwear(): void
+    {
+        $item = InspectLink::deserialize(self::CSFLOAT_A);
+        $this->assertNotNull($item->paintwear);
+        $this->assertEqualsWithDelta(0.6337, $item->paintwear, 0.001);
+    }
+
+    public function testCsfloatB_StickerCount(): void
+    {
+        $this->assertCount(4, InspectLink::deserialize(self::CSFLOAT_B)->stickers);
+    }
+
+    public function testCsfloatB_StickerIds(): void
+    {
+        $stickers = InspectLink::deserialize(self::CSFLOAT_B)->stickers;
+        foreach ($stickers as $s) {
+            $this->assertSame(76, $s->stickerId);
+        }
+    }
+
+    public function testCsfloatB_Paintindex(): void
+    {
+        $this->assertSame(1352, InspectLink::deserialize(self::CSFLOAT_B)->paintindex);
+    }
+
+    public function testCsfloatB_Paintwear(): void
+    {
+        $item = InspectLink::deserialize(self::CSFLOAT_B);
+        $this->assertNotNull($item->paintwear);
+        $this->assertEqualsWithDelta(0.99, $item->paintwear, 0.001);
+    }
+
+    public function testCsfloatC_Defindex(): void
+    {
+        $this->assertSame(1355, InspectLink::deserialize(self::CSFLOAT_C)->defindex);
+    }
+
+    public function testCsfloatC_Quality(): void
+    {
+        $this->assertSame(12, InspectLink::deserialize(self::CSFLOAT_C)->quality);
+    }
+
+    public function testCsfloatC_KeychainHighlightReel(): void
+    {
+        $keychains = InspectLink::deserialize(self::CSFLOAT_C)->keychains;
+        $this->assertCount(1, $keychains);
+        $this->assertSame(345, $keychains[0]->highlightReel);
+    }
+
+    public function testCsfloatC_NoPaintwear(): void
+    {
+        // keychain items have no wear — field 7 not present in proto
+        $this->assertNull(InspectLink::deserialize(self::CSFLOAT_C)->paintwear);
+    }
+
+    // -----------------------------------------------------------------------
+    // Roundtrip: highlight_reel and nullable paintwear
+    // -----------------------------------------------------------------------
+
+    public function testRoundtrip_HighlightReel(): void
+    {
+        $data = new ItemPreviewData(
+            defindex: 7,
+            keychains: [new Sticker(slot: 0, stickerId: 36, highlightReel: 345)],
+        );
+        $result = InspectLink::deserialize(InspectLink::serialize($data));
+        $this->assertCount(1, $result->keychains);
+        $this->assertSame(345, $result->keychains[0]->highlightReel);
+    }
+
+    public function testRoundtrip_NullPaintwear(): void
+    {
+        $data = new ItemPreviewData(defindex: 7, paintwear: null);
+        $result = InspectLink::deserialize(InspectLink::serialize($data));
+        $this->assertNull($result->paintwear);
+    }
+
+    public function testSerialize_NullPaintwearProducesFewerBytes(): void
+    {
+        // An item with null paintwear omits field 7 entirely; a non-zero float value writes it.
+        // (0.0 also omits field 7 due to proto3 default-value skipping, so compare against 0.5.)
+        $withNull = InspectLink::serialize(new ItemPreviewData(defindex: 7, paintwear: null));
+        $withFloat = InspectLink::serialize(new ItemPreviewData(defindex: 7, paintwear: 0.5));
+        $this->assertLessThan(strlen($withFloat), strlen($withNull));
+    }
 }
