@@ -102,6 +102,24 @@ InspectLink::isClassic($classicUrl); // true
 
 ---
 
+## Validation rules
+
+`deserialize()` enforces:
+
+| Rule | Limit | Exception |
+|------|-------|-----------|
+| Hex payload length | max 4,096 characters | `InvalidArgumentException` |
+| Protobuf field count | max 100 per message | `OverflowException` |
+
+`serialize()` enforces:
+
+| Field | Constraint | Exception |
+|-------|-----------|-----------|
+| `paintwear` | `[0.0, 1.0]` | `InvalidArgumentException` |
+| `customname` | max 100 characters | `InvalidArgumentException` |
+
+---
+
 ## How the format works
 
 Three URL formats are handled:
