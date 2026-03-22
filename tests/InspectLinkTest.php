@@ -570,4 +570,86 @@ class InspectLinkTest extends TestCase
         $withFloat = InspectLink::serialize(new ItemPreviewData(defindex: 7, paintwear: 0.5));
         $this->assertLessThan(strlen($withFloat), strlen($withNull));
     }
+
+    // -----------------------------------------------------------------------
+    // Sticker Slab test vectors (defIndex=1355, quality=8, sticker slab variant via paintKit)
+    // -----------------------------------------------------------------------
+
+    /** Sticker Slab URL A — rarity=5, keychains[0].stickerId=37, keychains[0].paintKit=7256 */
+    private const SLAB_URL_A = 'steam://run/730//+csgo_econ_action_preview%20918191895A9BB191B994A199F991E191339096999181B4F149A98D5C0889';
+
+    /** Sticker Slab URL B — rarity=3, keychains[0].stickerId=37, keychains[0].paintKit=275 */
+    private const SLAB_URL_B = 'steam://run/730//+csgo_econ_action_preview%20CBDBCBD300C1EBCBE3C8FBC3A3CBBBCB69CACCC3CBDBEEAB58C9B8B67C83';
+
+    public function testSlabA_Defindex(): void
+    {
+        $this->assertSame(1355, InspectLink::deserialize(self::SLAB_URL_A)->defindex);
+    }
+
+    public function testSlabA_Quality(): void
+    {
+        $this->assertSame(8, InspectLink::deserialize(self::SLAB_URL_A)->quality);
+    }
+
+    public function testSlabA_Rarity(): void
+    {
+        $this->assertSame(5, InspectLink::deserialize(self::SLAB_URL_A)->rarity);
+    }
+
+    public function testSlabA_KeychainStickerId(): void
+    {
+        $keychains = InspectLink::deserialize(self::SLAB_URL_A)->keychains;
+        $this->assertCount(1, $keychains);
+        $this->assertSame(37, $keychains[0]->stickerId);
+    }
+
+    public function testSlabA_KeychainPaintKit(): void
+    {
+        $keychains = InspectLink::deserialize(self::SLAB_URL_A)->keychains;
+        $this->assertCount(1, $keychains);
+        $this->assertSame(7256, $keychains[0]->paintKit);
+    }
+
+    public function testSlabB_Defindex(): void
+    {
+        $this->assertSame(1355, InspectLink::deserialize(self::SLAB_URL_B)->defindex);
+    }
+
+    public function testSlabB_Quality(): void
+    {
+        $this->assertSame(8, InspectLink::deserialize(self::SLAB_URL_B)->quality);
+    }
+
+    public function testSlabB_Rarity(): void
+    {
+        $this->assertSame(3, InspectLink::deserialize(self::SLAB_URL_B)->rarity);
+    }
+
+    public function testSlabB_KeychainStickerId(): void
+    {
+        $keychains = InspectLink::deserialize(self::SLAB_URL_B)->keychains;
+        $this->assertCount(1, $keychains);
+        $this->assertSame(37, $keychains[0]->stickerId);
+    }
+
+    public function testSlabB_KeychainPaintKit(): void
+    {
+        $keychains = InspectLink::deserialize(self::SLAB_URL_B)->keychains;
+        $this->assertCount(1, $keychains);
+        $this->assertSame(275, $keychains[0]->paintKit);
+    }
+
+    public function testRoundtrip_PaintKit(): void
+    {
+        $data = new ItemPreviewData(
+            defindex: 1355,
+            quality: 8,
+            rarity: 5,
+            keychains: [new Sticker(slot: 0, stickerId: 37, paintKit: 7256)],
+        );
+        $result = InspectLink::deserialize(InspectLink::serialize($data));
+        $this->assertCount(1, $result->keychains);
+        $this->assertSame(37, $result->keychains[0]->stickerId);
+        $this->assertSame(7256, $result->keychains[0]->paintKit);
+    }
 }

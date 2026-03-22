@@ -24,5 +24,6 @@ final class Sticker
         public ?float $offsetZ = null,
         public int $pattern = 0,
         public ?int $highlightReel = null,
+        public ?int $paintKit = null,
     ) {}
 }

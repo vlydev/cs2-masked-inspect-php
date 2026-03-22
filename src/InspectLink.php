@@ -220,6 +220,10 @@ final class InspectLink
             $w->writeUint32(11, $s->highlightReel);
         }
 
+        if ($s->paintKit !== null) {
+            $w->writeUint32(12, $s->paintKit);
+        }
+
         return $w->toBytes();
     }
 
@@ -241,6 +245,7 @@ final class InspectLink
                 9 => $s->offsetZ = (float) unpack('f', $f['value'])[1],
                 10 => $s->pattern = $f['value'],
                 11 => $s->highlightReel = $f['value'],
+                12 => $s->paintKit = $f['value'],
                 default => null,
             };
         }
