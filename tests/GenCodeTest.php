@@ -310,6 +310,57 @@ class GenCodeTest extends TestCase
     }
 
     // -----------------------------------------------------------------------
+    // toGenCode — keychain paintKit
+    // -----------------------------------------------------------------------
+
+    public function testToGenCodeKeychainWithPaintKitAppendsPaintKit(): void
+    {
+        $item = new ItemPreviewData(
+            defindex: 1355,
+            paintindex: 0,
+            paintseed: 0,
+            paintwear: 0.0,
+            keychains: [new Sticker(slot: 0, stickerId: 37, wear: 0.0, paintKit: 929)],
+        );
+        $code = GenCode::toGenCode($item, '');
+        $tokens = explode(' ', $code);
+        // last three tokens should be: 37 0 929
+        $this->assertSame('37', $tokens[count($tokens) - 3]);
+        $this->assertSame('0', $tokens[count($tokens) - 2]);
+        $this->assertSame('929', $tokens[count($tokens) - 1]);
+    }
+
+    public function testToGenCodeKeychainWithoutPaintKitNoExtraToken(): void
+    {
+        $item = new ItemPreviewData(
+            defindex: 7,
+            paintindex: 0,
+            paintseed: 0,
+            paintwear: 0.0,
+            keychains: [new Sticker(slot: 0, stickerId: 36, wear: 0.0)],
+        );
+        $code = GenCode::toGenCode($item, '');
+        $tokens = explode(' ', $code);
+        // last two tokens should be: 36 0
+        $this->assertSame('36', $tokens[count($tokens) - 2]);
+        $this->assertSame('0', $tokens[count($tokens) - 1]);
+    }
+
+    // -----------------------------------------------------------------------
+    // genCodeFromLink — sticker slab
+    // -----------------------------------------------------------------------
+
+    public function testGenCodeFromLinkSlabUrlEndsWithPaintKit(): void
+    {
+        $slabUrl = 'steam://run/730//+csgo_econ_action_preview%20819181994A8BA181A982B189E981F181238086898191A4E1208698F309C9';
+        $code = GenCode::genCodeFromLink($slabUrl, '');
+        $tokens = explode(' ', $code);
+        $this->assertSame('37', $tokens[count($tokens) - 3]);
+        $this->assertSame('0', $tokens[count($tokens) - 2]);
+        $this->assertSame('929', $tokens[count($tokens) - 1]);
+    }
+
+    // -----------------------------------------------------------------------
     // genCodeFromLink
     // -----------------------------------------------------------------------
 

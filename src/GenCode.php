@@ -59,6 +59,9 @@ final class GenCode
             foreach ($filtered as $s) {
                 $result[] = (string) $s->stickerId;
                 $result[] = self::formatFloat($s->wear ?? 0.0);
+                if ($s->paintKit !== null) {
+                    $result[] = (string) $s->paintKit;
+                }
             }
         }
 
