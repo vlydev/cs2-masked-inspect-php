@@ -70,11 +70,34 @@ final class InspectLink
             );
         }
 
+        // Reject malformed hex BEFORE hex2bin: odd-length input triggers E_WARNING
+        // ("Hexadecimal input string must have an even length") which Symfony / other
+        // global error handlers escalate to ErrorException — even though hex2bin would
+        // otherwise return false. Validate up-front to throw a clean, descriptive error.
+        if (strlen($hex) === 0 || strlen($hex) % 2 !== 0) {
+            throw new MalformedInspectLinkException(
+                sprintf(
+                    'Malformed inspect URL: hex payload has invalid length (%d chars, must be even and non-empty). The source likely truncated the URL. Input: "%s"',
+                    strlen($hex),
+                    self::abbreviateForError($hexOrUrl),
+                ),
+            );
+        }
+
+        if (1 !== preg_match('/^[0-9A-Fa-f]+$/', $hex)) {
+            throw new MalformedInspectLinkException(
+                sprintf(
+                    'Malformed inspect URL: payload contains non-hex characters. Input: "%s"',
+                    self::abbreviateForError($hexOrUrl),
+                ),
+            );
+        }
+
         $raw = hex2bin($hex);
 
         if ($raw === false || strlen($raw) < 6) {
-            throw new \InvalidArgumentException(
-                sprintf('Payload too short or invalid hex: "%s"', $hexOrUrl),
+            throw new MalformedInspectLinkException(
+                sprintf('Malformed inspect URL: payload too short (%d bytes, need ≥6). Input: "%s"', $raw === false ? 0 : strlen($raw), self::abbreviateForError($hexOrUrl)),
             );
         }
 
@@ -92,7 +115,24 @@ final class InspectLink
         // Layout: [key_byte] [proto_bytes] [4-byte checksum]
         $protoBytes = substr($decrypted, 1, -4);
 
-        return self::decodeItem($protoBytes);
+        try {
+            return self::decodeItem($protoBytes);
+        } catch (\Throwable $e) {
+            throw new MalformedInspectLinkException(
+                sprintf(
+                    'Malformed inspect URL: protobuf decode failed (%s). The payload is likely corrupted or truncated. Input: "%s"',
+                    $e->getMessage(),
+                    self::abbreviateForError($hexOrUrl),
+                ),
+                0,
+                $e,
+            );
+        }
+    }
+
+    private static function abbreviateForError(string $input): string
+    {
+        return strlen($input) > 120 ? substr($input, 0, 100) . '...' : $input;
     }
 
     // ------------------------------------------------------------------
