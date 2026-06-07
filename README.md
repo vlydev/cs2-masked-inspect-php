@@ -83,11 +83,13 @@ Gen codes are space-separated command strings used on CS2 community servers to s
 
 Format:
 ```
-!gen {defindex} {paintindex} {paintseed} {paintwear} [{s0_id} {s0_wear} ... {s4_id} {s4_wear}] [{kc_id} {kc_wear} ...]
+!gen {defindex} {paintindex} {paintseed} {paintwear} [{s0_id} {s0_wear} ... {s4_id} {s4_wear}] [{kc_id} {kc_wear} ...] {scoreType} {kills} [sd {n} ...] [kd {n} ...]
 ```
 
 - Stickers are always represented as 5 slot pairs (padded with `0 0` for empty slots)
 - Keychains are appended without padding, only for present slots
+- StatTrak is appended as a mandatory numeric suffix: `{scoreType} {kills}` (`0 0` means no StatTrak value)
+- Optional `sd`/`kd` blocks preserve exact placement (slot, scale, rotation, offsets, pattern, paintKit) for stickers/keychains
 - Float values have trailing zeros stripped (max 8 decimal places); `0.0` becomes `"0"`
 
 ### Generate a Steam inspect URL from parameters
@@ -123,9 +125,36 @@ $item = new ItemPreviewData(
 );
 
 $code = GenCode::toGenCode($item);
-// "!gen 7 474 306 0.22540508 0 0 0 0 7203 0 0 0 0 0"
+// "!gen 7 474 306 0.22540508 0 0 0 0 7203 0 0 0 0 0 0 0"
 
 $code = GenCode::toGenCode($item, '!g'); // custom prefix
+```
+
+Exact placement example (includes `sd` block):
+
+```php
+$item = new ItemPreviewData(
+    defindex: 7,
+    paintindex: 474,
+    paintseed: 306,
+    paintwear: 0.22540508,
+    stickers: [
+        new Sticker(
+            slot: 1,
+            stickerId: 7436,
+            wear: 0.08,
+            scale: 1.2,
+            rotation: 123.45,
+            offsetX: 0.11,
+            offsetY: -0.22,
+            offsetZ: 0.33,
+            pattern: 9,
+        ),
+    ],
+);
+
+$code = GenCode::toGenCode($item, '');
+// ... 0 0 sd 1 1 7436 0.08 1.2 123.45 0.11 -0.22 0.33 9 0
 ```
 
 ### Parse a gen code string
@@ -133,7 +162,7 @@ $code = GenCode::toGenCode($item, '!g'); // custom prefix
 ```php
 use VlyDev\Steam\GenCode;
 
-$item = GenCode::parseGenCode('!gen 7 474 306 0.22540508 0 0 0 0 7203 0 0 0 0 0');
+$item = GenCode::parseGenCode('!gen 7 474 306 0.22540508 0 0 0 0 7203 0 0 0 0 0 0 0');
 echo $item->defindex;    // 7
 echo $item->paintindex;  // 474
 echo $item->paintseed;   // 306
@@ -146,7 +175,7 @@ $item2 = GenCode::parseGenCode('7 474 306 0.22540508'); // prefix is optional
 
 ```php
 $code = GenCode::genCodeFromLink('steam://rungame/730/76561202255233023/+csgo_econ_action_preview%20001A...');
-// "!gen 7 474 306 0.22540508"
+// "!gen 7 474 306 0.22540508 0 0 0 0 0 0 0 0 0 0 0 0"
 ```
 
 ---

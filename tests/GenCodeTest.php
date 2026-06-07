@@ -22,6 +22,8 @@ class GenCodeTest extends TestCase
         $code = GenCode::toGenCode($item);
         $this->assertStringStartsWith('!gen ', $code);
         $this->assertStringContainsString('7 474 306 0.22540508', $code);
+        $this->assertStringEndsWith('0 0', $code);
+        $this->assertStringNotContainsString(' st ', $code);
     }
 
     public function testToGenCodeDefaultPrefix(): void
@@ -97,8 +99,8 @@ class GenCodeTest extends TestCase
         );
         $code = GenCode::toGenCode($item);
         $tokens = explode(' ', $code);
-        // !gen + 4 base + 10 sticker tokens = 15 tokens total
-        $this->assertCount(15, $tokens);
+        // !gen + 4 base + 10 sticker tokens + 2 stattrak tokens = 17 tokens total
+        $this->assertCount(17, $tokens);
         // slot 0: 0 0, slot 1: 0 0, slot 2: 7203 0, slot 3: 0 0, slot 4: 0 0
         // tokens: [0]=!gen [1]=7 [2]=474 [3]=306 [4]=0.22540508 [5]=0 [6]=0 [7]=0 [8]=0 [9]=7203 [10]=0 [11]=0 [12]=0 [13]=0 [14]=0
         $this->assertSame('0', $tokens[5]);
@@ -129,11 +131,13 @@ class GenCodeTest extends TestCase
         $item = new ItemPreviewData(defindex: 7, paintindex: 474, paintseed: 306, paintwear: 0.5);
         $code = GenCode::toGenCode($item);
         $tokens = explode(' ', $code);
-        // !gen + 4 + 10 = 15 tokens
-        $this->assertCount(15, $tokens);
+        // !gen + 4 + 10 + 2 stattrak suffix = 17 tokens
+        $this->assertCount(17, $tokens);
         for ($i = 5; $i <= 14; $i++) {
             $this->assertSame('0', $tokens[$i]);
         }
+        $this->assertSame('0', $tokens[15]);
+        $this->assertSame('0', $tokens[16]);
     }
 
     // -----------------------------------------------------------------------
@@ -151,10 +155,11 @@ class GenCodeTest extends TestCase
         );
         $code = GenCode::toGenCode($item);
         $tokens = explode(' ', $code);
-        // !gen + 4 base + 10 sticker + 2 keychain = 17
-        $this->assertCount(17, $tokens);
+        // !gen + 4 base + 10 sticker + 2 keychain + 2 stattrak + kd block (2 + 10) = 31
+        $this->assertCount(31, $tokens);
         $this->assertSame('36', $tokens[15]);
         $this->assertSame('0', $tokens[16]);
+        $this->assertContains('kd', $tokens);
     }
 
     public function testToGenCodeKeychainNotPadded(): void
@@ -169,7 +174,25 @@ class GenCodeTest extends TestCase
         $code = GenCode::toGenCode($item);
         $tokens = explode(' ', $code);
         // Only slot 2 keychain, not padded to 3 slots
-        $this->assertCount(17, $tokens);
+        $this->assertCount(31, $tokens);
+        $kdPos = array_search('kd', $tokens, true);
+        $this->assertNotFalse($kdPos);
+        $this->assertSame('2', $tokens[$kdPos + 2]); // explicit keychain slot in detail block
+    }
+
+    public function testToGenCodeIncludesStatTrakValues(): void
+    {
+        $item = new ItemPreviewData(
+            defindex: 7,
+            paintindex: 474,
+            paintseed: 306,
+            paintwear: 0.22540508,
+            killeaterscoretype: 0,
+            killeatervalue: 1337,
+        );
+        $code = GenCode::toGenCode($item, '');
+        $this->assertStringEndsWith('0 1337', $code);
+        $this->assertStringNotContainsString(' st ', $code);
     }
 
     // -----------------------------------------------------------------------
@@ -217,7 +240,7 @@ class GenCodeTest extends TestCase
     public function testParseGenCodeStickersFromPaddedSlots(): void
     {
         // slot2 = 7203, others empty
-        $item = GenCode::parseGenCode('!gen 7 474 306 0.22540508 0 0 0 0 7203 0 0 0 0 0');
+        $item = GenCode::parseGenCode('!gen 7 474 306 0.22540508 0 0 0 0 7203 0 0 0 0 0 0 0');
         $this->assertCount(1, $item->stickers);
         $this->assertSame(7203, $item->stickers[0]->stickerId);
         $this->assertSame(2, $item->stickers[0]->slot);
@@ -225,7 +248,7 @@ class GenCodeTest extends TestCase
 
     public function testParseGenCodeMultipleStickers(): void
     {
-        $item = GenCode::parseGenCode('!gen 7 474 306 0.22540508 7436 0 5144 0 0 0 0 0 0 0');
+        $item = GenCode::parseGenCode('!gen 7 474 306 0.22540508 7436 0 5144 0 0 0 0 0 0 0 0 0');
         $this->assertCount(2, $item->stickers);
         $ids = array_map(fn(Sticker $s) => $s->stickerId, $item->stickers);
         $this->assertContains(7436, $ids);
@@ -234,7 +257,7 @@ class GenCodeTest extends TestCase
 
     public function testParseGenCodeStickerWear(): void
     {
-        $item = GenCode::parseGenCode('!gen 7 474 306 0.5 7203 0.25 0 0 0 0 0 0 0 0');
+        $item = GenCode::parseGenCode('!gen 7 474 306 0.5 7203 0.25 0 0 0 0 0 0 0 0 0 0');
         $this->assertCount(1, $item->stickers);
         $this->assertNotNull($item->stickers[0]->wear);
         $this->assertEqualsWithDelta(0.25, $item->stickers[0]->wear, 1e-6);
@@ -246,6 +269,20 @@ class GenCodeTest extends TestCase
         $this->assertCount(0, $item->stickers);
     }
 
+    public function testParseGenCodeStatTrakSuffix(): void
+    {
+        $item = GenCode::parseGenCode('7 474 306 0.5 st 0 777');
+        $this->assertSame(0, $item->killeaterscoretype);
+        $this->assertSame(777, $item->killeatervalue);
+    }
+
+    public function testParseGenCodeLegacyWithoutStatTrakSuffixDefaultsToZero(): void
+    {
+        $item = GenCode::parseGenCode('7 474 306 0.5');
+        $this->assertSame(0, $item->killeaterscoretype);
+        $this->assertSame(0, $item->killeatervalue);
+    }
+
     // -----------------------------------------------------------------------
     // parseGenCode — keychains
     // -----------------------------------------------------------------------
@@ -253,7 +290,7 @@ class GenCodeTest extends TestCase
     public function testParseGenCodeKeychain(): void
     {
         // 10 sticker tokens + 2 keychain tokens
-        $item = GenCode::parseGenCode('7 941 2 0.22540508 0 0 0 0 0 0 0 0 0 0 36 0');
+        $item = GenCode::parseGenCode('7 941 2 0.22540508 0 0 0 0 0 0 0 0 0 0 36 0 0 0');
         $this->assertCount(1, $item->keychains);
         $this->assertSame(36, $item->keychains[0]->stickerId);
     }
@@ -307,6 +344,94 @@ class GenCodeTest extends TestCase
         $parsed = GenCode::parseGenCode(GenCode::toGenCode($original));
         $this->assertCount(1, $parsed->keychains);
         $this->assertSame(36, $parsed->keychains[0]->stickerId);
+        $this->assertSame(0, $parsed->keychains[0]->slot);
+    }
+
+    public function testRoundtripStickerPreservesExactPlacementAndRotation(): void
+    {
+        $original = new ItemPreviewData(
+            defindex: 7,
+            paintindex: 474,
+            paintseed: 306,
+            paintwear: 0.22540508,
+            stickers: [
+                new Sticker(
+                    slot: 1,
+                    stickerId: 7436,
+                    wear: 0.08,
+                    scale: 1.2,
+                    rotation: 123.45,
+                    offsetX: 0.11,
+                    offsetY: -0.22,
+                    offsetZ: 0.33,
+                    pattern: 9,
+                ),
+            ],
+        );
+
+        $parsed = GenCode::parseGenCode(GenCode::toGenCode($original));
+        $this->assertCount(1, $parsed->stickers);
+        $s = $parsed->stickers[0];
+        $this->assertSame(1, $s->slot);
+        $this->assertSame(7436, $s->stickerId);
+        $this->assertEqualsWithDelta(1.2, $s->scale ?? 0.0, 1e-6);
+        $this->assertEqualsWithDelta(123.45, $s->rotation ?? 0.0, 1e-6);
+        $this->assertEqualsWithDelta(0.11, $s->offsetX ?? 0.0, 1e-6);
+        $this->assertEqualsWithDelta(-0.22, $s->offsetY ?? 0.0, 1e-6);
+        $this->assertEqualsWithDelta(0.33, $s->offsetZ ?? 0.0, 1e-6);
+        $this->assertSame(9, $s->pattern);
+    }
+
+    public function testRoundtripKeychainPreservesExactPlacementAndRotation(): void
+    {
+        $original = new ItemPreviewData(
+            defindex: 7,
+            paintindex: 474,
+            paintseed: 306,
+            paintwear: 0.22540508,
+            keychains: [
+                new Sticker(
+                    slot: 3,
+                    stickerId: 36,
+                    wear: 0.07,
+                    scale: 0.95,
+                    rotation: 44.5,
+                    offsetX: -0.15,
+                    offsetY: 0.25,
+                    offsetZ: 0.35,
+                    pattern: 2,
+                    paintKit: 929,
+                ),
+            ],
+        );
+
+        $parsed = GenCode::parseGenCode(GenCode::toGenCode($original));
+        $this->assertCount(1, $parsed->keychains);
+        $kc = $parsed->keychains[0];
+        $this->assertSame(3, $kc->slot);
+        $this->assertSame(36, $kc->stickerId);
+        $this->assertEqualsWithDelta(0.95, $kc->scale ?? 0.0, 1e-6);
+        $this->assertEqualsWithDelta(44.5, $kc->rotation ?? 0.0, 1e-6);
+        $this->assertEqualsWithDelta(-0.15, $kc->offsetX ?? 0.0, 1e-6);
+        $this->assertEqualsWithDelta(0.25, $kc->offsetY ?? 0.0, 1e-6);
+        $this->assertEqualsWithDelta(0.35, $kc->offsetZ ?? 0.0, 1e-6);
+        $this->assertSame(2, $kc->pattern);
+        $this->assertSame(929, $kc->paintKit);
+    }
+
+    public function testRoundtripWithStatTrak(): void
+    {
+        $original = new ItemPreviewData(
+            defindex: 7,
+            paintindex: 474,
+            paintseed: 306,
+            paintwear: 0.22540508,
+            killeaterscoretype: 0,
+            killeatervalue: 451,
+        );
+        $parsed = GenCode::parseGenCode(GenCode::toGenCode($original));
+        $this->assertSame(0, $parsed->killeaterscoretype);
+        $this->assertSame(451, $parsed->killeatervalue);
     }
 
     // -----------------------------------------------------------------------
@@ -324,10 +449,13 @@ class GenCodeTest extends TestCase
         );
         $code = GenCode::toGenCode($item, '');
         $tokens = explode(' ', $code);
-        // last three tokens should be: 37 0 929
-        $this->assertSame('37', $tokens[count($tokens) - 3]);
-        $this->assertSame('0', $tokens[count($tokens) - 2]);
-        $this->assertSame('929', $tokens[count($tokens) - 1]);
+        $kdPos = array_search('kd', $tokens, true);
+        $this->assertNotFalse($kdPos);
+        // keychain legacy tuple is before stattrak; exact paintKit is also mirrored in kd block
+        $this->assertSame('37', $tokens[$kdPos - 5]);
+        $this->assertSame('0', $tokens[$kdPos - 4]);
+        $this->assertSame('929', $tokens[$kdPos - 3]);
+        $this->assertSame('929', $tokens[$kdPos + 11]);
     }
 
     public function testToGenCodeKeychainWithoutPaintKitNoExtraToken(): void
@@ -341,9 +469,11 @@ class GenCodeTest extends TestCase
         );
         $code = GenCode::toGenCode($item, '');
         $tokens = explode(' ', $code);
-        // last two tokens should be: 36 0
-        $this->assertSame('36', $tokens[count($tokens) - 2]);
-        $this->assertSame('0', $tokens[count($tokens) - 1]);
+        $kdPos = array_search('kd', $tokens, true);
+        $this->assertNotFalse($kdPos);
+        $this->assertSame('36', $tokens[$kdPos - 4]);
+        $this->assertSame('0', $tokens[$kdPos - 3]);
+        $this->assertSame('0', $tokens[$kdPos + 11]);
     }
 
     // -----------------------------------------------------------------------
@@ -355,9 +485,12 @@ class GenCodeTest extends TestCase
         $slabUrl = 'steam://run/730//+csgo_econ_action_preview%20819181994A8BA181A982B189E981F181238086898191A4E1208698F309C9';
         $code = GenCode::genCodeFromLink($slabUrl, '');
         $tokens = explode(' ', $code);
-        $this->assertSame('37', $tokens[count($tokens) - 3]);
-        $this->assertSame('0', $tokens[count($tokens) - 2]);
-        $this->assertSame('929', $tokens[count($tokens) - 1]);
+        $kdPos = array_search('kd', $tokens, true);
+        $this->assertNotFalse($kdPos);
+        $this->assertSame('37', $tokens[$kdPos - 5]);
+        $this->assertSame('0', $tokens[$kdPos - 4]);
+        $this->assertSame('929', $tokens[$kdPos - 3]);
+        $this->assertSame('929', $tokens[$kdPos + 11]);
     }
 
     // -----------------------------------------------------------------------
