@@ -26,16 +26,13 @@ final class Writer
 
     private function writeVarint(int $value): void
     {
-        // Handle negative numbers as two's-complement 64-bit
-        if ($value < 0) {
-            $value = $value & 0xFFFFFFFFFFFFFFFF;
-        }
-
+        // Negative ints are uint64 >= 2^63 in two's complement: shift logically,
+        // so the sign bit does not propagate and the loop ends after 10 bytes.
         $parts = [];
 
         do {
             $b = $value & 0x7F;
-            $value >>= 7;
+            $value = ($value >> 7) & (PHP_INT_MAX >> 6);
 
             if ($value !== 0) {
                 $b |= 0x80;

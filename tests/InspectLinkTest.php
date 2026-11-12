@@ -730,6 +730,62 @@ class InspectLinkTest extends TestCase
         }
     }
 
+    // -----------------------------------------------------------------------
+    // uint64 itemid with the top bit set (10-byte varint)
+    // -----------------------------------------------------------------------
+
+    /** Real Steam link (2026-11) whose itemid >= 2^63, encoded as a 10-byte varint. */
+    private const HIGH_BIT_ITEMID_URL = 'steam://run/730//+csgo_econ_action_preview%20'
+        . '4B5BD7E4B68FF5B880C5B54A53EC6C6BBC41634D7B4873A680CBB1480BAC49A56E6C13';
+
+    public function testTenByteVarintItemIdDecodes(): void
+    {
+        $item = InspectLink::deserialize(self::HIGH_BIT_ITEMID_URL);
+
+        // uint64 18310844006627497884 as PHP signed int64 (two's complement).
+        $this->assertSame(-135900067082053732, $item->itemid);
+        $this->assertSame(5031, $item->defindex);
+        $this->assertSame(1399, $item->paintindex);
+        $this->assertSame(6, $item->rarity);
+        $this->assertSame(3, $item->quality);
+    }
+
+    /**
+     * @return array<string, array{int}>
+     */
+    public static function itemIdBoundaryProvider(): array
+    {
+        return [
+            'zero' => [0],
+            'one-byte max 127' => [127],
+            'two-byte min 128' => [128],
+            'nine-byte max 2^63-1' => [PHP_INT_MAX],
+            'ten-byte -1 (uint64 max)' => [-1],
+            'ten-byte PHP_INT_MIN (2^63)' => [PHP_INT_MIN],
+            'ten-byte real prod itemid' => [-135900067082053732],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('itemIdBoundaryProvider')]
+    public function testItemIdRoundTripsThroughSerialize(int $itemId): void
+    {
+        $hex = InspectLink::serialize(new ItemPreviewData(itemid: $itemId, defindex: 7));
+
+        $item = InspectLink::deserialize($hex);
+
+        $this->assertSame($itemId, $item->itemid);
+        $this->assertSame(7, $item->defindex);
+    }
+
+    public function testElevenByteVarintIsRejected(): void
+    {
+        // key 0x00, tag field 2 varint, 10 continuation bytes + terminator (11 bytes), checksum.
+        $hex = '00' . '10' . str_repeat('FF', 10) . '01' . '00000000';
+
+        $this->expectException(MalformedInspectLinkException::class);
+        InspectLink::deserialize($hex);
+    }
+
     public function testMalformedUrlExceptionExtendsInvalidArgument(): void
     {
         // BC: existing callers catching \InvalidArgumentException must still work.

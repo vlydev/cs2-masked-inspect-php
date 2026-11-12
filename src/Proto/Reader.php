@@ -56,8 +56,10 @@ final class Reader
     }
 
     /**
-     * Read a base-128 varint, return as PHP int (may lose precision for >53-bit values).
-     * For uint64 fields (e.g. itemid), PHP's int is 64-bit on 64-bit platforms — safe.
+     * Read a base-128 varint (up to 10 bytes) as a 64-bit PHP int.
+     *
+     * uint64 values >= 2^63 (e.g. an itemid with the top bit set) come back
+     * as negative ints: same 64 bits, two's complement.
      */
     public function readVarint(): int
     {
@@ -65,13 +67,13 @@ final class Reader
         $shift = 0;
 
         do {
-            $b = $this->readByte();
-            $result |= ($b & 0x7F) << $shift;
-            $shift += 7;
-
             if ($shift > 63) {
                 throw new \OverflowException('Varint too long');
             }
+
+            $b = $this->readByte();
+            $result |= ($b & 0x7F) << $shift;
+            $shift += 7;
         } while ($b & 0x80);
 
         return $result;
